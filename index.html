@@ -6,11 +6,53 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Pump Chump</title>
     <!-- Buffer polyfill for crypto libraries -->
-    <script src="https://unpkg.com/buffer@6.0.3/index.js"></script>
     <script>
-      // Make Buffer and global available to crypto libraries
+      // Make global available
       window.global = window.global || window;
-      window.Buffer = window.Buffer || buffer.Buffer;
+      
+      // Buffer polyfill
+      window.Buffer = window.Buffer || {};
+      if (typeof window.Buffer.alloc !== 'function') {
+        window.Buffer.alloc = function(size, fill, encoding) {
+          if (typeof size !== 'number') {
+            throw new TypeError('The "size" argument must be of type number.');
+          }
+          var buf = new Uint8Array(size);
+          if (fill !== undefined) {
+            if (typeof fill === 'string') {
+              var fillBytes = new TextEncoder().encode(fill);
+              for (var i = 0; i < size; i++) {
+                buf[i] = fillBytes[i % fillBytes.length];
+              }
+            } else if (typeof fill === 'number') {
+              buf.fill(fill);
+            }
+          }
+          return buf;
+        };
+      }
+      
+      // Other Buffer methods
+      window.Buffer.from = window.Buffer.from || function(data, encoding) {
+        if (typeof data === 'string') {
+          return new TextEncoder().encode(data);
+        }
+        if (data instanceof ArrayBuffer) {
+          return new Uint8Array(data);
+        }
+        if (Array.isArray(data)) {
+          return new Uint8Array(data);
+        }
+        return new Uint8Array(data);
+      };
+      
+      // Crypto polyfill for require
+      window.require = window.require || function(module) {
+        if (module === 'crypto') {
+          return window.crypto || {};
+        }
+        return {};
+      };
     </script>
   </head>
   <body>
