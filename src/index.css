@@ -1,0 +1,53 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Override wallet adapter modal styles to match our theme */
+.wallet-adapter-modal {
+  background-color: rgba(0, 0, 0, 0.9) !important;
+}
+
+.wallet-adapter-modal-container {
+  background-color: #111111 !important;
+  border: 1px solid #374151 !important;
+  border-radius: 8px !important;
+}
+
+.wallet-adapter-modal-title {
+  color: white !important;
+  font-family: 'Courier New', monospace !important;
+  font-weight: bold !important;
+}
+
+.wallet-adapter-modal-list {
+  margin: 0 !important;
+}
+
+.wallet-adapter-modal-list-more {
+  border-top: 1px solid #374151 !important;
+}
+
+.wallet-adapter-modal-list li {
+  background-color: #1f2937 !important;
+  border: 1px solid #374151 !important;
+  border-radius: 6px !important;
+  margin-bottom: 8px !important;
+}
+
+.wallet-adapter-modal-list li:hover {
+  background-color: #374151 !important;
+  border-color: #4ade80 !important;
+}
+
+.wallet-adapter-modal-list li button {
+  color: white !important;
+  font-family: 'Courier New', monospace !important;
+}
+
+.wallet-adapter-modal-button-close {
+  color: #9ca3af !important;
+}
+
+.wallet-adapter-modal-button-close:hover {
+  color: white !important;
+}
