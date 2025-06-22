@@ -7,7 +7,24 @@ if (!supabaseUrl || !supabaseAnonKey) {
   throw new Error('Missing Supabase environment variables');
 }
 
-export const supabase = createClient(supabaseUrl, supabaseAnonKey);
+// Debug logs to verify configuration
+console.log('🔧 Supabase Configuration:');
+console.log('URL:', supabaseUrl);
+console.log('Anon Key:', supabaseAnonKey ? 'Present' : 'Missing');
+
+export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
+  auth: {
+    persistSession: false, // Don't persist auth sessions since we're using wallet auth
+    autoRefreshToken: false,
+    detectSessionInUrl: false
+  },
+  global: {
+    headers: {
+      'apikey': supabaseAnonKey,
+      'Authorization': `Bearer ${supabaseAnonKey}`,
+    }
+  }
+});
 
 export interface UserProfile {
   wallet_address: string;
