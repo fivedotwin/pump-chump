@@ -6,31 +6,48 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Pump Chump</title>
     <!-- Comprehensive polyfills for Solana wallets -->
-    <script src="https://unpkg.com/buffer@6.0.3/index.js"></script>
     <script>
-      // Global polyfill
-      window.global = window.global || window;
-      
-      // Buffer polyfill with complete implementation
-      if (typeof window.Buffer === 'undefined') {
-        window.Buffer = buffer.Buffer;
-      }
-      
-      // Ensure Buffer methods are available
-      if (!window.Buffer.alloc) {
-        window.Buffer = buffer.Buffer;
-      }
-      
-      // Process polyfill
+      // Process polyfill - MUST be defined first
       window.process = window.process || {
         env: { NODE_ENV: 'production' },
-        version: 'v16.0.0',
-        versions: { node: '16.0.0' },
+        version: 'v18.0.0',
+        versions: { node: '18.0.0' },
         browser: true,
         nextTick: function(fn) {
           setTimeout(fn, 0);
         }
       };
+      
+      // Global polyfill
+      window.global = window.global || window;
+    </script>
+    <script src="https://unpkg.com/buffer@6.0.3/index.js"></script>
+    <script>
+      // Buffer polyfill - Force override with proper implementation
+      window.Buffer = buffer.Buffer;
+      
+      // Verify Buffer.alloc is available
+      if (typeof window.Buffer.alloc !== 'function') {
+        console.error('Buffer.alloc still not available after polyfill');
+        // Fallback implementation
+        window.Buffer.alloc = function(size, fill, encoding) {
+          if (typeof size !== 'number') {
+            throw new TypeError('The "size" argument must be of type number.');
+          }
+          const buf = new Uint8Array(size);
+          if (fill !== undefined) {
+            if (typeof fill === 'number') {
+              buf.fill(fill);
+            } else if (typeof fill === 'string') {
+              const bytes = new TextEncoder().encode(fill);
+              for (let i = 0; i < size; i++) {
+                buf[i] = bytes[i % bytes.length];
+              }
+            }
+          }
+          return buf;
+        };
+      }
       
       // Require polyfill for Node.js modules
       window.require = window.require || function(module) {
@@ -46,12 +63,13 @@
         return {};
       };
       
-      // Stream polyfill basic implementation
-      window.Stream = window.Stream || {
-        Readable: function() {},
-        Writable: function() {},
-        Transform: function() {}
-      };
+      // Debug logging
+      console.log('Polyfills loaded:', {
+        Buffer: typeof window.Buffer,
+        'Buffer.alloc': typeof window.Buffer?.alloc,
+        process: typeof window.process,
+        global: typeof window.global
+      });
     </script>
   </head>
   <body>
