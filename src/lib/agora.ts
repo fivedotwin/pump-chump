@@ -9,7 +9,7 @@ import AgoraRTC, {
 
 // Agora configuration with your provided credentials
 const AGORA_APP_ID = '53a4264e93ad45e48cf19b0fb73bc76e';
-const AGORA_TOKEN = '007eJxTYJDbo22xo/mh3fwTUk33Z+s9/S7OLFidqOKUvd9vW0Bs+E8FBlPjRBMjM5NUS+PEFBPTVBOL5DRDyySDtCRz46Rkc7PU5XzhGQ2BjAzcRw6zMjJAIJjPUFCaW5CcASTKjBgYAN+XITM=';
+const AGORA_TOKEN = '007eJxTYPj9aYbKlDurZU4v/hx2aJeZHTP74WtCTHnpYMXENNXEIjnN0DLJIC3J3Dgp2dws9UxWREZDICND5ONTTIwMEAjiczMUlOYWJGcAiTIjBgYA9HAktg==';
 const CHANNEL_NAME = 'pumpchumpv2';
 
 export interface AgoraConfig {
@@ -124,7 +124,7 @@ export class AgoraService {
       });
       
       // Convert string UID to number if needed
-      let finalUid: UID = uid || null;
+      let finalUid: UID | null = uid || null;
       if (typeof uid === 'string') {
         // Convert string to a consistent number
         finalUid = parseInt(uid.slice(-6), 16) % 1000000;
