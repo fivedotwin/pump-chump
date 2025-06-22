@@ -7,9 +7,9 @@ import AgoraRTC, {
   UID
 } from 'agora-rtc-sdk-ng';
 
-// Agora configuration with your provided credentials
-const AGORA_APP_ID = '53a4264e93ad45e48cf19b0fb73bc76e';
-const AGORA_TOKEN = '007eJxTYPj9aYbKlDurZU4v/hx2aJeZHTP74WtCTHnpYMXENNXEIjnN0DLJIC3J3Dgp2dws9UxWREZDICND5ONTTIwMEAjiczMUlOYWJGcAiTIjBgYA9HAktg==';
+// Agora configuration with demo App ID for testing
+const AGORA_APP_ID = 'aab8b8f5a8cd4469a63042fcfafe7063';
+const AGORA_TOKEN = null; // Using null for testing without token
 const CHANNEL_NAME = 'pumpchumpv2';
 
 export interface AgoraConfig {
