@@ -6,9 +6,11 @@ export default defineConfig({
   plugins: [react()],
   optimizeDeps: {
     exclude: ['lucide-react'],
+    include: ['buffer']
   },
   define: {
     global: 'globalThis',
+    'process.env.NODE_ENV': '"production"'
   },
   resolve: {
     alias: {
@@ -16,6 +18,16 @@ export default defineConfig({
       crypto: 'crypto-browserify',
       stream: 'stream-browserify',
       util: 'util'
+    }
+  },
+  build: {
+    rollupOptions: {
+      external: [],
+      output: {
+        globals: {
+          buffer: 'Buffer'
+        }
+      }
     }
   }
 });
