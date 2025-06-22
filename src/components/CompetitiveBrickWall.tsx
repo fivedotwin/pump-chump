@@ -42,6 +42,11 @@ export const CompetitiveBrickWall: React.FC<CompetitiveBrickWallProps> = ({ chan
   const [loading, setLoading] = useState(true);
   const [myBricksCount, setMyBricksCount] = useState(0);
   
+  // 🚀 NEW: Countdown system
+  const [showCountdown, setShowCountdown] = useState(false);
+  const [countdownNumber, setCountdownNumber] = useState(5);
+  const [countdownText, setCountdownText] = useState('');
+  
   // Token system states
   const [tokenInfo, setTokenInfo] = useState<TokenInfo | null>(null);
   const [entryFeeCharged, setEntryFeeCharged] = useState(false);
@@ -67,6 +72,111 @@ export const CompetitiveBrickWall: React.FC<CompetitiveBrickWallProps> = ({ chan
 
   const { publicKey } = useWallet();
   const playerWallet = publicKey?.toString() || '';
+
+  // 🎵 NEW: Play countdown sounds
+  const playCountdownSound = (number: number, isReady = false, isGo = false) => {
+    try {
+      const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
+      const oscillator = audioContext.createOscillator();
+      const gainNode = audioContext.createGain();
+      
+      oscillator.connect(gainNode);
+      gainNode.connect(audioContext.destination);
+      
+      if (isGo) {
+        // 🚀 "GO!" sound - epic ascending sequence
+        const frequencies = [523, 659, 784, 1047]; // C5, E5, G5, C6
+        frequencies.forEach((freq, i) => {
+          const osc = audioContext.createOscillator();
+          const gain = audioContext.createGain();
+          osc.connect(gain);
+          gain.connect(audioContext.destination);
+          
+          osc.frequency.setValueAtTime(freq, audioContext.currentTime + i * 0.1);
+          gain.gain.setValueAtTime(0.6, audioContext.currentTime + i * 0.1);
+          gain.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.8);
+          osc.start(audioContext.currentTime + i * 0.1);
+          osc.stop(audioContext.currentTime + 0.8);
+        });
+      } else if (isReady) {
+        // 🎯 "Players Ready" sound - triumphant chord
+        [440, 554, 659].forEach((freq, i) => {
+          const osc = audioContext.createOscillator();
+          const gain = audioContext.createGain();
+          osc.connect(gain);
+          gain.connect(audioContext.destination);
+          
+          osc.frequency.setValueAtTime(freq, audioContext.currentTime);
+          gain.gain.setValueAtTime(0.4, audioContext.currentTime);
+          gain.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.6);
+          osc.start();
+          osc.stop(audioContext.currentTime + 0.6);
+        });
+      } else {
+        // 🔢 Number countdown - rising pitch
+        const baseFreq = 400 + (number * 100);
+        oscillator.frequency.setValueAtTime(baseFreq, audioContext.currentTime);
+        gainNode.gain.setValueAtTime(0.5, audioContext.currentTime);
+        gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.3);
+        oscillator.start();
+        oscillator.stop(audioContext.currentTime + 0.3);
+      }
+    } catch (error) {
+      console.log('Audio not available:', error);
+    }
+  };
+
+  // 🚀 NEW: Start countdown when all players are ready
+  const startCountdown = async () => {
+    if (!competition || !playerWallet) return;
+    
+    console.log('🚀 Starting countdown sequence!');
+    setShowCountdown(true);
+    
+    // 5, 4, 3, 2, 1 countdown
+    for (let i = 5; i >= 1; i--) {
+      setCountdownNumber(i);
+      setCountdownText(`${i}`);
+      playCountdownSound(i);
+      console.log(`⏰ Countdown: ${i}`);
+      await new Promise(resolve => setTimeout(resolve, 1000));
+    }
+    
+    // "Players Ready!"
+    setCountdownText('PLAYERS READY!');
+    playCountdownSound(0, true);
+    console.log('🎯 Players Ready!');
+    await new Promise(resolve => setTimeout(resolve, 1000));
+    
+    // "SET"
+    setCountdownText('SET!');
+    playCountdownSound(0, true);
+    console.log('🎯 Set!');
+    await new Promise(resolve => setTimeout(resolve, 1000));
+    
+    // "GO!"
+    setCountdownText('GO!');
+    playCountdownSound(0, false, true);
+    console.log('🚀 GO!');
+    await new Promise(resolve => setTimeout(resolve, 1000));
+    
+    // Hide countdown and start game
+    setShowCountdown(false);
+    
+    // Actually start the competition
+    try {
+      if (!competition.id.startsWith('local-')) {
+        await startCompetition(competition.id);
+      } else {
+        setCompetition(prev => prev ? { ...prev, game_status: 'active' } : prev);
+      }
+      setGameActive(true);
+      setTimeLeft(60);
+      console.log('🎮 Game started!');
+    } catch (error) {
+      console.error('❌ Error starting competition:', error);
+    }
+  };
 
   // Load token info when wallet connects
   useEffect(() => {
@@ -480,7 +590,7 @@ export const CompetitiveBrickWall: React.FC<CompetitiveBrickWallProps> = ({ chan
   };
 
   const handleStartGame = async () => {
-    console.log('🚀 START SOLO GAME clicked!');
+    console.log('🚀 START GAME clicked!');
     console.log('Competition:', competition);
     console.log('Player wallet:', playerWallet);
     
@@ -489,38 +599,24 @@ export const CompetitiveBrickWall: React.FC<CompetitiveBrickWallProps> = ({ chan
       console.error('No competition found');
       return;
     }
+
+    // 🚀 NEW: Check if all players are ready
+    const allReady = scores.length > 0 && scores.every(s => s.is_ready);
+    const hasPlayers = scores.length >= 1;
     
-    try {
-      console.log('Starting competition:', competition.id);
-      
-      // Handle local mode vs database mode
-      if (competition.id.startsWith('local-')) {
-        console.log('🏠 Starting local competition...');
-        // Local mode - just update state
-        setCompetition(prev => prev ? { ...prev, game_status: 'active' } : prev);
-        setTimeLeft(60);
-        setGameActive(true);
-        console.log('✅ Local competition started successfully');
-        alert('🎮 Local game started! You have 60 seconds! (Database offline)');
-      } else {
-        console.log('💾 Starting database competition...');
-        // Database mode - call API
-        await startCompetition(competition.id);
-        setTimeLeft(60);
-        setGameActive(true);
-        console.log('✅ Database competition started successfully');
-        alert('🎮 Game started! You have 60 seconds!');
-      }
-    } catch (error) {
-      console.error('❌ Error starting competition:', error);
-      
-      // Fallback to local mode if database fails
-      console.log('🔄 Falling back to local mode...');
-      setCompetition(prev => prev ? { ...prev, game_status: 'active' } : prev);
-      setTimeLeft(60);
-      setGameActive(true);
-      alert('🎮 Game started in local mode! (Database failed)');
+    if (!hasPlayers) {
+      alert('❌ Need at least 1 player to start!');
+      return;
     }
+    
+    if (!allReady) {
+      alert('❌ All players must be ready before starting!\n\nWaiting for:\n' + 
+        scores.filter(s => !s.is_ready).map(s => s.player_name).join('\n'));
+      return;
+    }
+    
+    // 🎵 Start the epic countdown sequence!
+    await startCountdown();
   };
 
   const handleBrickBreak = async (brickId: string, playerWallet: string) => {
@@ -1014,7 +1110,42 @@ export const CompetitiveBrickWall: React.FC<CompetitiveBrickWallProps> = ({ chan
     const canStart = scores.length >= 1 && allReady; // Allow single player for testing
 
     return (
-      <div className="min-h-screen bg-black text-white p-4">
+      <div className="min-h-screen bg-black text-white p-4 relative">
+        {/* 🎵 COUNTDOWN OVERLAY */}
+        {showCountdown && (
+          <div className="absolute inset-0 bg-black/95 flex items-center justify-center z-50">
+            <div className="text-center">
+              <div className="text-9xl font-bold text-yellow-400 mb-8 animate-pulse">
+                {countdownText}
+              </div>
+              {countdownNumber > 0 && countdownNumber <= 5 && (
+                <div className="text-6xl font-bold text-white mb-4">
+                  {countdownNumber}
+                </div>
+              )}
+              <div className="text-2xl text-green-400 animate-bounce">
+                {countdownText === 'GO!' ? '🚀 GAME STARTING!' : '🎮 Get Ready!'}
+              </div>
+              
+              {/* Countdown visual effects */}
+              <div className="absolute inset-0 pointer-events-none">
+                {Array.from({ length: 12 }).map((_, i) => (
+                  <div
+                    key={i}
+                    className="absolute w-4 h-4 bg-yellow-400 rounded-full animate-ping"
+                    style={{
+                      left: `${Math.random() * 100}%`,
+                      top: `${Math.random() * 100}%`,
+                      animationDelay: `${Math.random() * 2}s`,
+                      animationDuration: `${1 + Math.random()}s`
+                    }}
+                  />
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+        
         <div className="max-w-4xl mx-auto">
           <div className="bg-gray-900 border border-gray-700 rounded-xl p-6 mb-6">
             <div className="flex items-center justify-between mb-6">
@@ -1027,7 +1158,7 @@ export const CompetitiveBrickWall: React.FC<CompetitiveBrickWallProps> = ({ chan
                 )}
                 {/* Token Status */}
                 {tokenInfo && (
-                  <div className="mt-2 flex items-center gap-2">
+                  <div className="mt-2 flex items-center gap-2 flex-wrap">
                     <div className="px-3 py-1 bg-yellow-600/20 border border-yellow-400/50 rounded-full text-sm">
                       🪙 {tokenInfo.balance.toLocaleString()} tokens
                     </div>
@@ -1106,12 +1237,18 @@ export const CompetitiveBrickWall: React.FC<CompetitiveBrickWallProps> = ({ chan
             </div>
 
             {/* Action Buttons */}
-            <div className="flex items-center justify-center gap-6 mb-4">
+            <div className="flex items-center justify-center gap-6 mb-4 flex-wrap">
+              {/* 🚀 NEW: Start button only enabled when all players ready */}
               <button
                 onClick={handleStartGame}
-                className="px-12 py-4 bg-yellow-400 text-black font-bold text-lg rounded-lg hover:bg-yellow-300 transition-all transform hover:scale-105 animate-pulse shadow-lg"
+                disabled={!canStart}
+                className={`px-12 py-4 font-bold text-lg rounded-lg transition-all transform hover:scale-105 shadow-lg ${
+                  canStart 
+                    ? 'bg-yellow-400 text-black hover:bg-yellow-300 animate-pulse cursor-pointer'
+                    : 'bg-gray-600 text-gray-400 cursor-not-allowed opacity-50'
+                }`}
               >
-                🚀 START GAME!
+                {canStart ? '🚀 START COUNTDOWN!' : '⏳ WAITING FOR READY...'}
               </button>
               
               <button
@@ -1122,8 +1259,25 @@ export const CompetitiveBrickWall: React.FC<CompetitiveBrickWallProps> = ({ chan
                     : 'bg-green-400 text-black hover:bg-green-300'
                 }`}
               >
-                {isReady ? 'Cancel Ready' : 'Ready to Play!'}
+                {isReady ? '❌ Cancel Ready' : '✅ Ready to Play!'}
               </button>
+            </div>
+
+            {/* 🎯 NEW: Ready Status Display */}
+            <div className="text-center mb-4">
+              {canStart ? (
+                <div className="text-green-400 font-bold text-lg animate-pulse">
+                  🎉 ALL PLAYERS READY! Click START to begin countdown! 🎉
+                </div>
+              ) : scores.length > 0 ? (
+                <div className="text-yellow-400">
+                  Waiting for {scores.filter(s => !s.is_ready).length} player(s) to get ready...
+                </div>
+              ) : (
+                <div className="text-gray-400">
+                  Loading players...
+                </div>
+              )}
             </div>
 
             {/* Leaderboard Button */}

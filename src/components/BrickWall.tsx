@@ -116,13 +116,56 @@ export const BrickWall: React.FC<BrickWallProps> = ({
   
   const gameAreaRef = useRef<HTMLDivElement>(null);
 
-  // Configuration - Unlimited bricks for competition mode
+  // Configuration - Mobile responsive brick sizing
   const TOTAL_BRICKS = 999999; // Effectively unlimited
   const BRICKS_PER_LEVEL = 50;
-  const BRICK_HEIGHT = 35;
   const ROWS_PER_LEVEL = 5;
   const BRICKS_PER_ROW = 10;
-  const WALL_HEIGHT = 200;
+  
+  // 📱 MOBILE RESPONSIVE: Dynamic sizing based on screen width
+  const [gameArea, setGameArea] = useState({ width: 800, height: 600 });
+  const [isMobile, setIsMobile] = useState(false);
+  
+  // 📱 Calculate responsive brick dimensions
+  const calculateBrickDimensions = () => {
+    const containerWidth = gameArea.width;
+    const containerHeight = gameArea.height;
+    const isMobileDevice = containerWidth < 768;
+    
+    setIsMobile(isMobileDevice);
+    
+    // Mobile: Bigger bricks, fewer per row for better touch targets
+    const bricksPerRow = isMobileDevice ? 6 : 10;
+    const spacing = isMobileDevice ? 4 : 2;
+    const brickWidth = Math.floor((containerWidth - (spacing * (bricksPerRow + 1))) / bricksPerRow);
+    const brickHeight = isMobileDevice ? 50 : 35; // Bigger on mobile
+    
+    return {
+      brickWidth,
+      brickHeight,
+      bricksPerRow,
+      spacing,
+      isMobile: isMobileDevice
+    };
+  };
+
+  // 📱 Handle window resize for responsive design
+  const handleResize = () => {
+    if (gameAreaRef.current) {
+      const rect = gameAreaRef.current.getBoundingClientRect();
+      setGameArea({ 
+        width: rect.width || 800, 
+        height: rect.height || 600 
+      });
+    }
+  };
+
+  // 📱 Set up responsive sizing
+  useEffect(() => {
+    handleResize();
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
 
   // Initialize achievements
   useEffect(() => {
@@ -682,57 +725,39 @@ export const BrickWall: React.FC<BrickWallProps> = ({
     }
   }, [activePowerUp, bricks]);
 
-  // Generate current level's bricks - SMART RESPONSIVE GRID
+  // 📱 Generate current level's bricks - MOBILE OPTIMIZED RESPONSIVE GRID
   const generateLevelBricks = useCallback((level: number) => {
     const newBricks: Brick[] = [];
     const startBrickIndex = level * BRICKS_PER_LEVEL;
     const endBrickIndex = Math.min(startBrickIndex + BRICKS_PER_LEVEL, TOTAL_BRICKS);
     
-    // Get actual container dimensions from the ref
-    const gameArea = gameAreaRef.current;
-    const containerWidth = gameArea?.clientWidth || window.innerWidth;
-    const containerHeight = gameArea?.clientHeight || Math.max(window.innerHeight - 300, 300);
+    // 📱 Use responsive brick calculations
+    const { brickWidth, brickHeight, bricksPerRow, spacing, isMobile: isMobileDevice } = calculateBrickDimensions();
     
-    // Smart brick width calculation - scale with screen size but keep reasonable limits
-    const baseWidth = containerWidth / BRICKS_PER_ROW;
-    const minBrickWidth = 60; // Minimum for mobile
-    const maxBrickWidth = 150; // Maximum for large screens
-    const brickWidth = Math.max(minBrickWidth, Math.min(maxBrickWidth, Math.floor(baseWidth)));
-    
-    // Smart brick height calculation - ensure all bricks fit in visible area
-    const headerReserved = 20; // Minimal space for header
-    const footerReserved = 20; // Minimal space for instructions
-    const availableHeight = Math.max(containerHeight - headerReserved - footerReserved, 200);
-    
-    // Calculate height that guarantees all rows fit in available space
-    const maxHeightFromSpace = Math.floor(availableHeight / ROWS_PER_LEVEL);
-    
-    // Calculate ideal height based on aspect ratio (wider bricks = taller bricks)
-    const aspectBasedHeight = brickWidth * 0.35; // Slightly more rectangular
-    
-    // Use smaller of aspect-based or space-based, with reasonable limits
-    const minBrickHeight = 30; // Minimum clickable size
-    const maxBrickHeight = 70; // Maximum for visual appeal
-    const responsiveBrickHeight = Math.max(
-      minBrickHeight,
-      Math.min(maxBrickHeight, Math.min(aspectBasedHeight, maxHeightFromSpace))
-    );
-    
-    // Calculate total grid dimensions
-    const totalGridWidth = brickWidth * BRICKS_PER_ROW;
-    const totalGridHeight = responsiveBrickHeight * ROWS_PER_LEVEL;
+    // Calculate total grid dimensions with spacing
+    const totalGridWidth = (brickWidth * bricksPerRow) + (spacing * (bricksPerRow - 1));
+    const totalGridHeight = (brickHeight * ROWS_PER_LEVEL) + (spacing * (ROWS_PER_LEVEL - 1));
     
     // Center the grid both horizontally and vertically
-    const gridOffsetX = Math.max(0, (containerWidth - totalGridWidth) / 2);
-    const gridOffsetY = Math.max(headerReserved, (containerHeight - totalGridHeight) / 2);
+    const gridOffsetX = Math.max(0, (gameArea.width - totalGridWidth) / 2);
+    const gridOffsetY = Math.max(spacing, (gameArea.height - totalGridHeight) / 2);
     
     let brickCount = 0;
     
+    console.log(`📱 Generating bricks for level ${level + 1}:`, {
+      isMobile: isMobileDevice,
+      brickSize: `${brickWidth}x${brickHeight}`,
+      bricksPerRow,
+      spacing,
+      gridSize: `${totalGridWidth}x${totalGridHeight}`,
+      gridOffset: `${gridOffsetX},${gridOffsetY}`
+    });
+    
     for (let row = 0; row < ROWS_PER_LEVEL && startBrickIndex + brickCount < endBrickIndex; row++) {
-      for (let col = 0; col < BRICKS_PER_ROW && startBrickIndex + brickCount < endBrickIndex; col++) {
-        // Perfect centered grid with guaranteed visibility
-        const x = gridOffsetX + (col * brickWidth);
-        const y = gridOffsetY + (row * responsiveBrickHeight);
+      for (let col = 0; col < bricksPerRow && startBrickIndex + brickCount < endBrickIndex; col++) {
+        // 📱 Perfect responsive grid with spacing
+        const x = gridOffsetX + (col * (brickWidth + spacing));
+        const y = gridOffsetY + (row * (brickHeight + spacing));
         
         newBricks.push({
           id: `brick-${startBrickIndex + brickCount}`,
@@ -740,7 +765,7 @@ export const BrickWall: React.FC<BrickWallProps> = ({
           y,
           targetY: y,
           width: brickWidth,
-          height: responsiveBrickHeight,
+          height: brickHeight,
           isBroken: false,
           opacity: 0.9 + Math.random() * 0.1,
           glowIntensity: 0.6 + Math.random() * 0.4,
@@ -752,8 +777,9 @@ export const BrickWall: React.FC<BrickWallProps> = ({
       }
     }
     
+    console.log(`✅ Generated ${newBricks.length} bricks for level ${level + 1}`);
     return newBricks;
-  }, []);
+  }, [calculateBrickDimensions, gameArea.width, gameArea.height]);
 
   // Apply gravity physics to make bricks fall down automatically
   const applyGravityPhysics = useCallback(() => {
