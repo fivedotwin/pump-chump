@@ -5,53 +5,52 @@
     <link rel="icon" type="image/png" href="https://i.imgur.com/RdENATy.png" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Pump Chump</title>
-    <!-- Buffer polyfill for crypto libraries -->
+    <!-- Comprehensive polyfills for Solana wallets -->
+    <script src="https://unpkg.com/buffer@6.0.3/index.js"></script>
     <script>
-      // Make global available
+      // Global polyfill
       window.global = window.global || window;
       
-      // Buffer polyfill
-      window.Buffer = window.Buffer || {};
-      if (typeof window.Buffer.alloc !== 'function') {
-        window.Buffer.alloc = function(size, fill, encoding) {
-          if (typeof size !== 'number') {
-            throw new TypeError('The "size" argument must be of type number.');
-          }
-          var buf = new Uint8Array(size);
-          if (fill !== undefined) {
-            if (typeof fill === 'string') {
-              var fillBytes = new TextEncoder().encode(fill);
-              for (var i = 0; i < size; i++) {
-                buf[i] = fillBytes[i % fillBytes.length];
-              }
-            } else if (typeof fill === 'number') {
-              buf.fill(fill);
-            }
-          }
-          return buf;
-        };
+      // Buffer polyfill with complete implementation
+      if (typeof window.Buffer === 'undefined') {
+        window.Buffer = buffer.Buffer;
       }
       
-      // Other Buffer methods
-      window.Buffer.from = window.Buffer.from || function(data, encoding) {
-        if (typeof data === 'string') {
-          return new TextEncoder().encode(data);
+      // Ensure Buffer methods are available
+      if (!window.Buffer.alloc) {
+        window.Buffer = buffer.Buffer;
+      }
+      
+      // Process polyfill
+      window.process = window.process || {
+        env: { NODE_ENV: 'production' },
+        version: 'v16.0.0',
+        versions: { node: '16.0.0' },
+        browser: true,
+        nextTick: function(fn) {
+          setTimeout(fn, 0);
         }
-        if (data instanceof ArrayBuffer) {
-          return new Uint8Array(data);
-        }
-        if (Array.isArray(data)) {
-          return new Uint8Array(data);
-        }
-        return new Uint8Array(data);
       };
       
-      // Crypto polyfill for require
+      // Require polyfill for Node.js modules
       window.require = window.require || function(module) {
         if (module === 'crypto') {
-          return window.crypto || {};
+          return window.crypto;
+        }
+        if (module === 'buffer') {
+          return { Buffer: window.Buffer };
+        }
+        if (module === 'process') {
+          return window.process;
         }
         return {};
+      };
+      
+      // Stream polyfill basic implementation
+      window.Stream = window.Stream || {
+        Readable: function() {},
+        Writable: function() {},
+        Transform: function() {}
       };
     </script>
   </head>
