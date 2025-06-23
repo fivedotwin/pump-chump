@@ -979,8 +979,12 @@ export const BrickWall: React.FC<BrickWallProps> = ({
         : brick
     ));
     
+    console.log('🎬 Breaking animation started for bricks:', bricksToBreak);
+    
     // Wait for breaking animation to play
-    await new Promise(resolve => setTimeout(resolve, 400)); // Increased duration for better visual effect
+    await new Promise(resolve => setTimeout(resolve, 800)); // Longer duration to see the effect
+    
+    console.log('🎬 Breaking animation complete, marking bricks as broken');
     
     setBricks(prevBricks => {
       // Get current container dimensions
@@ -1189,6 +1193,9 @@ export const BrickWall: React.FC<BrickWallProps> = ({
       playerWallet
     });
     
+    // 🎯 IMMEDIATE VISUAL FEEDBACK
+    console.log('🎯 CLICK DETECTED ON BRICK:', brickId);
+    
     const brick = bricks.find(b => b.id === brickId);
     console.log('🔍 Found brick:', brick);
     
@@ -1218,6 +1225,12 @@ export const BrickWall: React.FC<BrickWallProps> = ({
     }
     
     console.log('✅ All checks passed, calling breakBrick...');
+    
+    // 🎯 Add immediate visual feedback before breakBrick
+    setBricks(prevBricks => prevBricks.map(b => 
+      b.id === brickId ? { ...b, isBreaking: true } : b
+    ));
+    
     breakBrick(brickId);
   };
 
@@ -1518,7 +1531,7 @@ export const BrickWall: React.FC<BrickWallProps> = ({
                   : activePowerUp === 'grandstreak'
                   ? '0 0 25px rgba(255, 255, 255, 1.0)' // Intense white glow for grand streak
                   : '0 0 10px rgba(34, 197, 94, 0.4)',
-                display: brick.isBroken ? 'none' : 'block',
+                display: brick.isBroken && !brick.isBreaking ? 'none' : 'block', // 🎬 Keep visible during breaking animation
                 transform: brick.isBreaking ? 'scale(1.1) rotate(2deg)' : brick.isFalling ? 'scale(0.95)' : 'scale(1)', // 🎬 Scale and rotate when breaking
                 zIndex: brick.isBreaking ? 20 : 10 // Higher z-index for breaking bricks
               }}
