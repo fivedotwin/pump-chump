@@ -26,7 +26,7 @@ console.log('✅ Buffer polyfill loaded:', {
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <ErrorBoundary>
-      <App />
+    <App />
     </ErrorBoundary>
   </StrictMode>
 );

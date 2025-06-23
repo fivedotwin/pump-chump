@@ -201,6 +201,42 @@ export async function setPlayerReady(competitionId: string, playerWallet: string
   if (error) throw error;
 }
 
+// Remove player from competition
+export async function removePlayerFromCompetition(competitionId: string, playerWallet: string): Promise<void> {
+  console.log('🚪 Removing player from competition:', { competitionId, playerWallet });
+  
+  const { error } = await supabase
+    .from('competition_scores')
+    .update({ is_active: false })
+    .eq('competition_id', competitionId)
+    .eq('player_wallet', playerWallet);
+
+  if (error) {
+    console.error('❌ Error removing player:', error);
+    throw error;
+  }
+  
+  console.log('✅ Player removed from competition successfully');
+}
+
+// Check if player is still in competition
+export async function isPlayerInCompetition(competitionId: string, playerWallet: string): Promise<boolean> {
+  const { data, error } = await supabase
+    .from('competition_scores')
+    .select('is_active')
+    .eq('competition_id', competitionId)
+    .eq('player_wallet', playerWallet)
+    .eq('is_active', true)
+    .maybeSingle();
+
+  if (error) {
+    console.error('Error checking player status:', error);
+    return false;
+  }
+
+  return data !== null;
+}
+
 // Start competition
 export async function startCompetition(competitionId: string): Promise<void> {
   const { error } = await supabase

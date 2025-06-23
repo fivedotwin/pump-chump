@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Trophy, Clock, Users, Star, Zap, ArrowLeft, Video, VideoOff, Mic, MicOff } from 'lucide-react';
+import { Trophy, Clock, Users, Zap, ArrowLeft, Video, VideoOff, Mic, MicOff } from 'lucide-react';
 import { useWallet } from '@solana/wallet-adapter-react';
 import { agoraService, RemoteUser } from '../lib/agora';
 import { 
@@ -18,6 +18,8 @@ import {
   getUserTokenInfo,
   chargeGameEntryFee,
   distributeWinnings,
+  removePlayerFromCompetition,
+  isPlayerInCompetition,
   type TokenInfo
 } from '../lib/supabase';
 import { BrickWall } from './BrickWall';
@@ -52,6 +54,9 @@ export const CompetitiveBrickWall: React.FC<CompetitiveBrickWallProps> = ({ chan
   const [entryFeeCharged, setEntryFeeCharged] = useState(false);
   const [insufficientTokens, setInsufficientTokens] = useState(false);
   const [winningsDistributed, setWinningsDistributed] = useState(false);
+  
+  // 🚪 NEW: Ready timeout countdown
+  const [readyTimeLeft, setReadyTimeLeft] = useState<number | null>(null);
   
   // Leaderboard states
   const [showLeaderboard, setShowLeaderboard] = useState(false);
@@ -430,11 +435,9 @@ export const CompetitiveBrickWall: React.FC<CompetitiveBrickWallProps> = ({ chan
         console.log('✅ Competition players:', players);
         setScores(players);
         
-        // Auto-ready for testing if not already ready
+        // Show ready instructions if not ready
         if (!playerScore.is_ready) {
-          console.log('🚀 Auto-setting player as ready...');
-          await setPlayerReady(comp.id, playerWallet, true);
-          setIsReady(true);
+          console.log('⚠️ Player needs to ready up manually (1-minute timeout active)');
         }
       } catch (error) {
         console.error('❌ Error initializing competition:', error);
@@ -457,7 +460,7 @@ export const CompetitiveBrickWall: React.FC<CompetitiveBrickWallProps> = ({ chan
           player_wallet: playerWallet,
           player_name: `Player_${playerWallet.slice(0, 4)}`,
           current_score: 0,
-          is_ready: true,
+          is_ready: false,
           is_active: true,
           bricks_broken: 0,
           level_reached: 1,
@@ -467,7 +470,7 @@ export const CompetitiveBrickWall: React.FC<CompetitiveBrickWallProps> = ({ chan
         setCompetition(fallbackCompetition);
         setMyScore(fallbackScore);
         setScores([fallbackScore]);
-        setIsReady(true);
+        setIsReady(false);
         setGameActive(false);
         
         console.log('✅ Local fallback competition created');
@@ -522,6 +525,102 @@ export const CompetitiveBrickWall: React.FC<CompetitiveBrickWallProps> = ({ chan
     return () => {
       competitionSub.unsubscribe();
       scoresSub.unsubscribe();
+    };
+  }, [competition, playerWallet]);
+
+  // 🚪 NEW: Auto-kick players who don't ready up within 1 minute
+  useEffect(() => {
+    if (!competition || !playerWallet || isReady || gameActive || competition.game_status !== 'waiting') return;
+    
+    console.log('⏰ Starting 1-minute ready timeout for player');
+    setReadyTimeLeft(60); // Start 60-second countdown
+    
+    const readyTimeout = setTimeout(async () => {
+      try {
+        console.log('❌ Player timeout - removing from lobby (didn\'t ready up in 1 minute)');
+        
+        // Check if still in competition and not ready
+        const stillInComp = await isPlayerInCompetition(competition.id, playerWallet);
+        if (stillInComp && !isReady) {
+          await removePlayerFromCompetition(competition.id, playerWallet);
+          
+          // Show message and go back
+          alert('⏰ You were removed from the lobby for not readying up within 1 minute.\n\nPlease join again and mark yourself as ready!');
+          onBack();
+        }
+      } catch (error) {
+        console.error('❌ Error during ready timeout:', error);
+      }
+    }, 60000); // 60 seconds = 1 minute
+
+    return () => {
+      console.log('🛑 Clearing ready timeout');
+      clearTimeout(readyTimeout);
+      setReadyTimeLeft(null);
+    };
+  }, [competition, playerWallet, isReady, gameActive]);
+
+  // 🚪 NEW: Update ready countdown every second
+  useEffect(() => {
+    if (readyTimeLeft === null || readyTimeLeft <= 0) return;
+
+    const interval = setInterval(() => {
+      setReadyTimeLeft(prev => {
+        if (prev === null || prev <= 1) {
+          return null;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+
+    return () => clearInterval(interval);
+  }, [readyTimeLeft]);
+
+  // 🚪 NEW: Cleanup when browser window closes
+  useEffect(() => {
+    if (!competition || !playerWallet) return;
+
+    const handleBeforeUnload = async () => {
+      console.log('🚪 Browser closing - cleaning up player from lobby');
+      try {
+        // Remove player from competition when they close browser
+        await removePlayerFromCompetition(competition.id, playerWallet);
+        console.log('✅ Player cleaned up successfully');
+      } catch (error) {
+        console.error('❌ Error cleaning up player:', error);
+      }
+    };
+
+    const handleUnload = () => {
+      // Use navigator.sendBeacon for reliable cleanup on page unload
+      if (typeof navigator.sendBeacon === 'function' && !competition.id.startsWith('local-')) {
+        const data = JSON.stringify({
+          competition_id: competition.id,
+          player_wallet: playerWallet,
+          action: 'remove_player'
+        });
+        
+        // This would need a server endpoint, but for now we'll just log
+        console.log('📡 Sending cleanup beacon (would need server endpoint):', data);
+      }
+    };
+
+    // Add event listeners
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    window.addEventListener('unload', handleUnload);
+    
+    // Also cleanup on component unmount
+    return () => {
+      console.log('🧹 Component unmounting - cleaning up player');
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+      window.removeEventListener('unload', handleUnload);
+      
+      // Cleanup player on unmount
+      if (competition && !competition.id.startsWith('local-')) {
+        removePlayerFromCompetition(competition.id, playerWallet).catch(error => {
+          console.error('❌ Error cleaning up on unmount:', error);
+        });
+      }
     };
   }, [competition, playerWallet]);
 
@@ -582,8 +681,15 @@ export const CompetitiveBrickWall: React.FC<CompetitiveBrickWallProps> = ({ chan
     if (!competition || !playerWallet) return;
     
     try {
-      await setPlayerReady(competition.id, playerWallet, !isReady);
-      setIsReady(!isReady);
+      const newReadyState = !isReady;
+      await setPlayerReady(competition.id, playerWallet, newReadyState);
+      setIsReady(newReadyState);
+      
+      // 🚪 NEW: Clear ready timeout when player readies up
+      if (newReadyState) {
+        console.log('✅ Player readied up - clearing timeout');
+        setReadyTimeLeft(null);
+      }
     } catch (error) {
       console.error('Error setting ready status:', error);
     }
@@ -599,7 +705,7 @@ export const CompetitiveBrickWall: React.FC<CompetitiveBrickWallProps> = ({ chan
       console.error('No competition found');
       return;
     }
-
+    
     // 🚀 NEW: Check if all players are ready
     const allReady = scores.length > 0 && scores.every(s => s.is_ready);
     const hasPlayers = scores.length >= 1;
@@ -1276,6 +1382,24 @@ export const CompetitiveBrickWall: React.FC<CompetitiveBrickWallProps> = ({ chan
               ) : (
                 <div className="text-gray-400">
                   Loading players...
+                </div>
+              )}
+              
+              {/* 🚪 NEW: Ready timeout warning */}
+              {!isReady && readyTimeLeft !== null && readyTimeLeft > 0 && (
+                <div className={`mt-3 p-3 rounded-lg border-2 ${
+                  readyTimeLeft <= 15 
+                    ? 'bg-red-600/20 border-red-400 text-red-300 animate-pulse' 
+                    : readyTimeLeft <= 30
+                    ? 'bg-orange-600/20 border-orange-400 text-orange-300'
+                    : 'bg-yellow-600/20 border-yellow-400 text-yellow-300'
+                }`}>
+                  <div className="font-bold text-lg">
+                    ⏰ Ready up in {Math.floor(readyTimeLeft / 60)}:{(readyTimeLeft % 60).toString().padStart(2, '0')}
+                  </div>
+                  <div className="text-sm opacity-80">
+                    You'll be automatically removed if you don't ready up!
+                  </div>
                 </div>
               )}
             </div>
