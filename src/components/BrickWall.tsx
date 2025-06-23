@@ -8,6 +8,7 @@ interface Brick {
   width: number;
   height: number;
   isBroken: boolean;
+  isBreaking?: boolean; // 🆕 NEW: Breaking animation state
   brokenBy?: string;
   brokenAt?: number;
   opacity: number;
@@ -971,8 +972,15 @@ export const BrickWall: React.FC<BrickWallProps> = ({
     // 🔊 PLAY SOUND EFFECT
     playSound('break');
     
-    // Quick breaking animation
-    await new Promise(resolve => setTimeout(resolve, 200));
+    // 🎬 Start breaking animation for all affected bricks
+    setBricks(prevBricks => prevBricks.map(brick => 
+      bricksToBreak.includes(brick.id) && !brick.isBroken
+        ? { ...brick, isBreaking: true }
+        : brick
+    ));
+    
+    // Wait for breaking animation to play
+    await new Promise(resolve => setTimeout(resolve, 400)); // Increased duration for better visual effect
     
     setBricks(prevBricks => {
       // Get current container dimensions
@@ -989,34 +997,35 @@ export const BrickWall: React.FC<BrickWallProps> = ({
       const totalGridWidth = brickWidth * BRICKS_PER_ROW;
       const gridOffsetX = Math.max(0, (containerWidth - totalGridWidth) / 2);
       
-      return prevBricks.map(brick => {
-        // Break multiple bricks if power-up is active
-        if (bricksToBreak.includes(brick.id) && !brick.isBroken) {
-          // When a brick breaks, make bricks above it fall down
-          const brokenBrickCol = Math.round((brick.x - gridOffsetX) / brickWidth);
-          
-          // Mark bricks above as falling
-          prevBricks.forEach(otherBrick => {
-            if (otherBrick.isBroken) return;
+              return prevBricks.map(brick => {
+          // Break multiple bricks if power-up is active
+          if (bricksToBreak.includes(brick.id) && !brick.isBroken) {
+            // When a brick breaks, make bricks above it fall down
+            const brokenBrickCol = Math.round((brick.x - gridOffsetX) / brickWidth);
             
-            const otherCol = Math.round((otherBrick.x - gridOffsetX) / brickWidth);
+            // Mark bricks above as falling
+            prevBricks.forEach(otherBrick => {
+              if (otherBrick.isBroken) return;
+              
+              const otherCol = Math.round((otherBrick.x - gridOffsetX) / brickWidth);
+              
+              // If brick is in same column and above the broken brick, make it fall
+              if (otherCol === brokenBrickCol && otherBrick.y < brick.y) {
+                otherBrick.isFalling = true;
+                otherBrick.isAnimating = true;
+              }
+            });
             
-            // If brick is in same column and above the broken brick, make it fall
-            if (otherCol === brokenBrickCol && otherBrick.y < brick.y) {
-              otherBrick.isFalling = true;
-              otherBrick.isAnimating = true;
-            }
-          });
-          
-          return {
-            ...brick,
-            isBroken: true,
-            brokenBy: playerWallet,
-            brokenAt: Date.now()
-          };
-        }
-        return brick;
-      });
+            return {
+              ...brick,
+              isBroken: true,
+              isBreaking: false, // 🎬 Clear breaking animation
+              brokenBy: playerWallet,
+              brokenAt: Date.now()
+            };
+          }
+          return brick;
+        });
     });
     
     // 🎯 UPDATE COMBO/STREAK SYSTEM
@@ -1420,17 +1429,20 @@ export const BrickWall: React.FC<BrickWallProps> = ({
           {bricks.map((brick) => (
             <div
               key={brick.id}
-              className={`absolute border-2 rounded transition-all duration-100 ${
-                !brick.isBroken && !gameWinner && !isLevelTransition ? 'hover:brightness-125 cursor-pointer' : ''
+              className={`absolute border-2 rounded transition-all duration-300 ${
+                !brick.isBroken && !brick.isBreaking && !gameWinner && !isLevelTransition ? 'hover:brightness-125 cursor-pointer' : ''
               } ${selectedBrick === brick.id ? 'animate-pulse brightness-150' : ''} ${
                 brick.isFalling ? 'animate-pulse' : ''
-              }`}
+              } ${brick.isBreaking ? 'animate-bounce' : ''}`} // 🎬 Breaking animation
               style={{
                 left: `${brick.x}px`,
                 top: `${brick.y}px`,
                 width: `${brick.width}px`,
                 height: `${brick.height}px`,
-                background: brick.isBroken ? 'transparent' : brick.isFalling 
+                background: brick.isBroken ? 'transparent' : 
+                  brick.isBreaking 
+                  ? 'linear-gradient(135deg, #ff6b6b, #ff8e53, #ff6b35)' // 🔥 Breaking effect - red/orange
+                  : brick.isFalling 
                   ? 'linear-gradient(135deg, #fbbf24, #f59e0b, #d97706)' 
                   : activePowerUp === 'fire'
                   ? 'linear-gradient(135deg, #ff4444, #ff6600, #22c55e)' // Fire effect
@@ -1441,7 +1453,10 @@ export const BrickWall: React.FC<BrickWallProps> = ({
                   : activePowerUp === 'grandstreak'
                   ? 'linear-gradient(135deg, #ff00ff, #00ffff, #ffff00, #22c55e)' // Grand streak rainbow effect
                   : 'linear-gradient(135deg, #22c55e, #16a34a, #15803d)',
-                borderColor: brick.isBroken ? 'transparent' : brick.isFalling 
+                borderColor: brick.isBroken ? 'transparent' : 
+                  brick.isBreaking 
+                  ? '#ff4444' // 🔥 Red border when breaking
+                  : brick.isFalling 
                   ? '#f59e0b' 
                   : activePowerUp === 'fire'
                   ? '#ff4444'
@@ -1452,8 +1467,13 @@ export const BrickWall: React.FC<BrickWallProps> = ({
                   : activePowerUp === 'grandstreak'
                   ? '#ffffff' // White border for grand streak
                   : '#16a34a',
-                opacity: brick.isBroken ? 0 : brick.opacity,
-                boxShadow: brick.isBroken ? 'none' : brick.isFalling 
+                opacity: brick.isBroken ? 0 : 
+                  brick.isBreaking ? 0.7 : // 🎬 Fade during breaking
+                  brick.opacity,
+                boxShadow: brick.isBroken ? 'none' : 
+                  brick.isBreaking 
+                  ? '0 0 25px rgba(255, 68, 68, 1.0), inset 0 0 15px rgba(255, 255, 255, 0.5)' // 💥 Intense breaking glow + inner light
+                  : brick.isFalling 
                   ? '0 0 15px rgba(251, 191, 36, 0.6)' 
                   : activePowerUp === 'fire'
                   ? '0 0 15px rgba(255, 68, 68, 0.8)'
@@ -1465,12 +1485,13 @@ export const BrickWall: React.FC<BrickWallProps> = ({
                   ? '0 0 25px rgba(255, 255, 255, 1.0)' // Intense white glow for grand streak
                   : '0 0 10px rgba(34, 197, 94, 0.4)',
                 display: brick.isBroken ? 'none' : 'block',
-                zIndex: 10
+                transform: brick.isBreaking ? 'scale(1.1) rotate(2deg)' : brick.isFalling ? 'scale(0.95)' : 'scale(1)', // 🎬 Scale and rotate when breaking
+                zIndex: brick.isBreaking ? 20 : 10 // Higher z-index for breaking bricks
               }}
               onClick={() => handleBrickClick(brick.id)}
             >
               {/* Brick Highlight */}
-              {!brick.isBroken && (
+              {!brick.isBroken && !brick.isBreaking && (
                 <div
                   className="absolute top-1 left-1 right-1 rounded-t"
                   style={{
@@ -1482,8 +1503,44 @@ export const BrickWall: React.FC<BrickWallProps> = ({
                 />
               )}
               
+              {/* 💥 EPIC BREAKING ANIMATION */}
+              {brick.isBreaking && (
+                <>
+                  {/* Crack patterns */}
+                  <div className="absolute inset-0 pointer-events-none">
+                    <div className="absolute top-2 left-2 w-0.5 h-4 bg-black/80 rotate-45 animate-pulse"></div>
+                    <div className="absolute top-3 right-3 w-0.5 h-3 bg-black/80 -rotate-45 animate-pulse"></div>
+                    <div className="absolute bottom-2 left-1/2 w-3 h-0.5 bg-black/80 animate-pulse"></div>
+                    <div className="absolute top-1/2 left-1 w-2 h-0.5 bg-black/80 rotate-12 animate-pulse"></div>
+                  </div>
+                  
+                  {/* Central explosion effect */}
+                  <div className="absolute inset-0 flex items-center justify-center">
+                    <div className="w-6 h-6 bg-red-400 rounded-full animate-ping opacity-90" />
+                    <div className="absolute w-4 h-4 bg-yellow-400 rounded-full animate-ping opacity-80" />
+                    <div className="absolute text-lg animate-bounce">💥</div>
+                  </div>
+                  
+                  {/* Particle effects */}
+                  <div className="absolute inset-0 pointer-events-none">
+                    {Array.from({ length: 6 }).map((_, i) => (
+                      <div
+                        key={i}
+                        className="absolute w-1 h-1 bg-yellow-400 rounded-full animate-ping"
+                        style={{
+                          left: `${20 + Math.random() * 60}%`,
+                          top: `${20 + Math.random() * 60}%`,
+                          animationDelay: `${Math.random() * 0.3}s`,
+                          animationDuration: `${0.4 + Math.random() * 0.2}s`
+                        }}
+                      />
+                    ))}
+                  </div>
+                </>
+              )}
+              
               {/* Falling Effect Trail */}
-              {brick.isFalling && !brick.isBroken && (
+              {brick.isFalling && !brick.isBroken && !brick.isBreaking && (
                 <>
                   <div
                     className="absolute opacity-40 rounded"
@@ -1508,8 +1565,8 @@ export const BrickWall: React.FC<BrickWallProps> = ({
                 </>
               )}
               
-              {/* Breaking Animation */}
-              {selectedBrick === brick.id && isBreaking && (
+              {/* Legacy Breaking Animation (fallback) */}
+              {selectedBrick === brick.id && isBreaking && !brick.isBreaking && (
                 <div className="absolute inset-0 flex items-center justify-center">
                   <div className="w-8 h-8 bg-yellow-400 rounded-full animate-ping opacity-80" />
                   <div className="absolute text-xl animate-bounce">💥</div>
