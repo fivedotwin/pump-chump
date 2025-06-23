@@ -1180,11 +1180,45 @@ export const BrickWall: React.FC<BrickWallProps> = ({
 
   // Handle brick click/tap
   const handleBrickClick = (brickId: string) => {
+    console.log('🔍 BRICK CLICK DEBUG:', {
+      brickId,
+      totalBricks: bricks.length,
+      isBreaking,
+      gameWinner,
+      isLevelTransition,
+      playerWallet
+    });
+    
     const brick = bricks.find(b => b.id === brickId);
-    if (brick && !brick.isBroken && !isBreaking && !gameWinner && !isLevelTransition) {
-      console.log(`Clicked brick: ${brickId}`);
-      breakBrick(brickId);
+    console.log('🔍 Found brick:', brick);
+    
+    if (!brick) {
+      console.log('❌ Brick not found!');
+      return;
     }
+    
+    if (brick.isBroken) {
+      console.log('❌ Brick already broken!');
+      return;
+    }
+    
+    if (isBreaking) {
+      console.log('❌ Already breaking another brick!');
+      return;
+    }
+    
+    if (gameWinner) {
+      console.log('❌ Game is over, winner exists!');
+      return;
+    }
+    
+    if (isLevelTransition) {
+      console.log('❌ Level transition in progress!');
+      return;
+    }
+    
+    console.log('✅ All checks passed, calling breakBrick...');
+    breakBrick(brickId);
   };
 
   const progress = TOTAL_BRICKS > 0 ? (totalBrokenBricks / TOTAL_BRICKS) * 100 : 0;
