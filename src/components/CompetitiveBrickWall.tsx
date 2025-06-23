@@ -20,6 +20,8 @@ import {
   distributeWinnings,
   removePlayerFromCompetition,
   isPlayerInCompetition,
+  cleanupOldCompetitions,
+  refreshPlayerReadyState,
   type TokenInfo
 } from '../lib/supabase';
 import { BrickWall } from './BrickWall';
@@ -682,16 +684,39 @@ export const CompetitiveBrickWall: React.FC<CompetitiveBrickWallProps> = ({ chan
     
     try {
       const newReadyState = !isReady;
+      console.log('🔄 Setting ready state:', { from: isReady, to: newReadyState, competitionId: competition.id, playerWallet });
+      
+      // Update database
       await setPlayerReady(competition.id, playerWallet, newReadyState);
+      console.log('✅ Database updated successfully');
+      
+      // Update local state
       setIsReady(newReadyState);
       
-      // 🚪 NEW: Clear ready timeout when player readies up
+      // 🔍 Force refresh player state to ensure sync
+      const refreshedState = await refreshPlayerReadyState(competition.id, playerWallet);
+      if (refreshedState) {
+        console.log('🔍 Refreshed state from database:', refreshedState.is_ready);
+        setIsReady(refreshedState.is_ready);
+        
+        // Update myScore with latest data
+        setMyScore(refreshedState);
+      }
+      
+      // 🚪 Clear ready timeout when player readies up
       if (newReadyState) {
         console.log('✅ Player readied up - clearing timeout');
         setReadyTimeLeft(null);
       }
+      
+      // 🔄 Force refresh all players to ensure everyone sees the update
+      const allPlayers = await getCompetitionPlayers(competition.id);
+      console.log('🔄 Refreshed all players:', allPlayers);
+      setScores(allPlayers);
+      
     } catch (error) {
-      console.error('Error setting ready status:', error);
+      console.error('❌ Error setting ready status:', error);
+      alert('Failed to update ready status. Please try again.');
     }
   };
 
@@ -1297,24 +1322,38 @@ export const CompetitiveBrickWall: React.FC<CompetitiveBrickWallProps> = ({ chan
 
             {/* Player List */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-              {scores.map((score) => (
-                <div
-                  key={score.id}
-                  className={`p-4 rounded-lg border-2 ${
-                    score.is_ready ? 'border-green-400 bg-green-400/10' : 'border-gray-600 bg-gray-800'
-                  } ${score.player_wallet === playerWallet ? 'ring-2 ring-blue-400' : ''}`}
-                >
-                  <div className="flex items-center justify-between">
-                    <span className="font-bold">{score.player_name}</span>
-                    <span className={`text-sm ${score.is_ready ? 'text-green-400' : 'text-red-400'}`}>
-                      {score.is_ready ? '✓ Ready' : '⏳ Waiting'}
-                    </span>
+              {scores.map((score) => {
+                const lastUpdate = new Date(score.updated_at);
+                const minutesAgo = Math.floor((Date.now() - lastUpdate.getTime()) / (1000 * 60));
+                const isStale = minutesAgo > 2;
+                
+                return (
+                  <div
+                    key={score.id}
+                    className={`p-4 rounded-lg border-2 ${
+                      score.is_ready ? 'border-green-400 bg-green-400/10' : 'border-gray-600 bg-gray-800'
+                    } ${score.player_wallet === playerWallet ? 'ring-2 ring-blue-400' : ''} ${
+                      isStale ? 'opacity-60 border-red-500' : ''
+                    }`}
+                  >
+                    <div className="flex items-center justify-between">
+                      <span className="font-bold">{score.player_name}</span>
+                      <span className={`text-sm ${score.is_ready ? 'text-green-400' : 'text-red-400'}`}>
+                        {score.is_ready ? '✓ Ready' : '⏳ Waiting'}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between mt-1">
+                      {score.player_wallet === playerWallet && (
+                        <div className="text-xs text-blue-400">You</div>
+                      )}
+                      <div className={`text-xs ${isStale ? 'text-red-400' : 'text-gray-400'}`}>
+                        {minutesAgo === 0 ? 'Just now' : `${minutesAgo}m ago`}
+                        {isStale && ' (stale)'}
+                      </div>
+                    </div>
                   </div>
-                  {score.player_wallet === playerWallet && (
-                    <div className="text-xs text-blue-400 mt-1">You</div>
-                  )}
-                </div>
-              ))}
+                );
+              })}
             </div>
 
             {/* Game Instructions */}
@@ -1404,14 +1443,34 @@ export const CompetitiveBrickWall: React.FC<CompetitiveBrickWallProps> = ({ chan
               )}
             </div>
 
-            {/* Leaderboard Button */}
-            <div className="flex justify-center">
+            {/* Action Buttons */}
+            <div className="flex justify-center gap-4">
               <button
                 onClick={() => setShowLeaderboard(true)}
                 className="px-6 py-3 bg-purple-600/20 border-2 border-purple-400/50 rounded-lg text-purple-400 font-bold hover:bg-purple-600/30 transition-all flex items-center gap-2"
               >
                 <Trophy className="w-5 h-5" />
                 🏆 VIEW LEADERBOARD
+              </button>
+              
+              {/* 🧹 Manual cleanup button for debugging */}
+              <button
+                onClick={async () => {
+                  console.log('🧹 Manual cleanup triggered');
+                  try {
+                    await cleanupOldCompetitions();
+                    if (competition) {
+                      const freshPlayers = await getCompetitionPlayers(competition.id);
+                      setScores(freshPlayers);
+                      console.log('✅ Manual cleanup complete, refreshed players:', freshPlayers);
+                    }
+                  } catch (error) {
+                    console.error('❌ Manual cleanup failed:', error);
+                  }
+                }}
+                className="px-4 py-3 bg-red-600/20 border-2 border-red-400/50 rounded-lg text-red-400 font-bold hover:bg-red-600/30 transition-all text-sm"
+              >
+                🧹 CLEAN OLD PLAYERS
               </button>
             </div>
 

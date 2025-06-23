@@ -105,43 +105,38 @@ export interface CompetitionScore {
 
 // Create or join competition
 export async function createOrJoinCompetition(channelName: string, playerWallet: string, playerName: string): Promise<{ competition: LiveCompetition; playerScore: CompetitionScore }> {
-  // First, try to find existing competition (waiting OR active for single-player testing)
+  console.log('🎮 Creating/joining competition:', { channelName, playerWallet, playerName });
+  
+  // 🧹 First, clean up old competitions
+  await cleanupOldCompetitions();
+  
+  // Try to find existing waiting competition (not active ones)
   const { data: existingList, error: existingError } = await supabase
     .from('live_competitions')
     .select('*')
     .eq('channel_name', channelName)
-    .in('game_status', ['waiting', 'active'])
+    .eq('game_status', 'waiting')
     .order('created_at', { ascending: false })
     .limit(1);
 
   const existing = existingList && existingList.length > 0 ? existingList[0] : null;
-
   let competition: LiveCompetition;
 
   if (existing) {
+    console.log('✅ Found existing waiting competition:', existing.id);
     competition = existing;
-    // If competition is active, reset it for solo testing
-    if (existing.game_status === 'active') {
-      await supabase
-        .from('live_competitions')
-        .update({ 
-          game_status: 'waiting', 
-          timer_remaining: 60,
-          start_time: null,
-          end_time: null,
-          winner_wallet: null 
-        })
-        .eq('id', existing.id);
+    
+    // 🧹 Clean up any stale players from this competition (older than 2 minutes)
+    const twoMinutesAgo = new Date(Date.now() - 2 * 60 * 1000).toISOString();
+    await supabase
+      .from('competition_scores')
+      .update({ is_active: false })
+      .eq('competition_id', existing.id)
+      .lt('updated_at', twoMinutesAgo);
       
-      // Clear existing scores for fresh start
-      await supabase
-        .from('competition_scores')
-        .delete()
-        .eq('competition_id', existing.id);
-        
-      competition.game_status = 'waiting';
-    }
+    console.log('🧹 Cleaned up stale players from competition');
   } else {
+    console.log('🆕 Creating new competition for channel:', channelName);
     // Create new competition
     const { data: newComp, error: createError } = await supabase
       .from('live_competitions')
@@ -151,9 +146,11 @@ export async function createOrJoinCompetition(channelName: string, playerWallet:
 
     if (createError) throw createError;
     competition = newComp;
+    console.log('✅ Created new competition:', competition.id);
   }
 
-  // Add player to competition (upsert to handle rejoining)
+  // 🔄 Add/update player in competition with fresh data
+  console.log('👤 Adding player to competition...');
   const { data: playerScore, error: scoreError } = await supabase
     .from('competition_scores')
     .upsert({
@@ -162,15 +159,20 @@ export async function createOrJoinCompetition(channelName: string, playerWallet:
       player_name: playerName,
       current_score: 0,
       is_ready: false,
-      is_active: true
+      is_active: true,
+      updated_at: new Date().toISOString()
     }, {
       onConflict: 'competition_id,player_wallet'
     })
     .select()
     .single();
 
-  if (scoreError) throw scoreError;
+  if (scoreError) {
+    console.error('❌ Error adding player to competition:', scoreError);
+    throw scoreError;
+  }
 
+  console.log('✅ Player added successfully:', playerScore);
   return { competition, playerScore };
 }
 
@@ -1152,4 +1154,66 @@ export async function getWithdrawalStatus(withdrawalId: string): Promise<Withdra
     console.error('Error getting withdrawal status:', error);
     return null;
   }
+}
+
+// 🧹 NEW: Clean up old competitions and stale players
+export async function cleanupOldCompetitions(): Promise<void> {
+  console.log('🧹 Cleaning up old competitions...');
+  
+  // Mark competitions older than 10 minutes as finished
+  const tenMinutesAgo = new Date(Date.now() - 10 * 60 * 1000).toISOString();
+  
+  const { error: competitionError } = await supabase
+    .from('live_competitions')
+    .update({ game_status: 'finished' })
+    .lt('created_at', tenMinutesAgo)
+    .in('game_status', ['waiting', 'active']);
+
+  if (competitionError) {
+    console.error('❌ Error cleaning up old competitions:', competitionError);
+  }
+
+  // Get old competition IDs first
+  const { data: oldCompetitions } = await supabase
+    .from('live_competitions')
+    .select('id')
+    .lt('created_at', tenMinutesAgo);
+
+  // Mark players in old competitions as inactive
+  if (oldCompetitions && oldCompetitions.length > 0) {
+    const oldCompetitionIds = oldCompetitions.map(comp => comp.id);
+    const { error: playersError } = await supabase
+      .from('competition_scores')
+      .update({ is_active: false })
+      .in('competition_id', oldCompetitionIds);
+    
+    if (playersError) {
+      console.error('❌ Error cleaning up old players:', playersError);
+    } else {
+      console.log('✅ Old competitions and players cleaned up');
+    }
+  } else {
+    console.log('✅ No old competitions to clean up');
+  }
+}
+
+// 🔍 NEW: Force refresh player ready state
+export async function refreshPlayerReadyState(competitionId: string, playerWallet: string): Promise<CompetitionScore | null> {
+  console.log('🔍 Refreshing player ready state:', { competitionId, playerWallet });
+  
+  const { data, error } = await supabase
+    .from('competition_scores')
+    .select('*')
+    .eq('competition_id', competitionId)
+    .eq('player_wallet', playerWallet)
+    .eq('is_active', true)
+    .maybeSingle();
+
+  if (error) {
+    console.error('❌ Error refreshing player state:', error);
+    return null;
+  }
+
+  console.log('🔍 Current player state:', data);
+  return data;
 }
